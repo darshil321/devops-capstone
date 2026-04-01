@@ -1,0 +1,45 @@
+# Dependencies — never copy these (they belong in the image, built fresh)
+node_modules/
+npm-debug.log*
+
+# TypeScript source maps and compiled output (we compile inside Docker)
+dist/
+*.js.map
+
+# Test artifacts
+coverage/
+.nyc_output/
+
+# Dev environment files — never leak these into an image
+.env
+.env.local
+.env.development
+.env.test
+
+# Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker itself
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# CI/CD - no need in image
+Jenkinsfile
+.github/
+
+# Documentation — not needed at runtime
+docs/
+README.md
+*.md

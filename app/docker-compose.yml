@@ -1,0 +1,87 @@
+version: '3.9'
+
+# =============================================================================
+# LOCAL DEVELOPMENT STACK
+# =============================================================================
+# This mirrors the production EKS environment as closely as possible:
+#   - app     → what runs in the NestJS pod on EKS
+#   - postgres → simulates an RDS Postgres instance
+#
+# Key difference from production:
+#   - We use a dev build target here (with devDependencies) for hot reload
+#   - Production uses the multi-stage Dockerfile's 'runner' target
+#
+# WHY docker-compose and not just `npm run start:dev`?
+# Because in EKS, your app runs as a container alongside other services.
+# Getting used to that network model locally prevents surprises later.
+# =============================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # In local dev we use the 'builder' stage which has devDeps
+      # In production CI (Jenkins), we use the full Dockerfile (runner stage)
+      target: builder
+    container_name: devops-capstone-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      # Database connection — matches what postgres service exposes
+      # IMPORTANT: The hostname here is 'postgres' (the service name in this file)
+      # NOT 'localhost'. Containers communicate by service name, not by localhost.
+      # This is exactly how K8s service discovery works too: pods find each other
+      # by Service name (the K8s Service object), not by IP address.
+      DATABASE_URL: postgresql://devops:devops_password@postgres:5432/devops_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount source for hot reload in development
+      - ./src:/app/src:ro
+    networks:
+      - capstone-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: devops-capstone-postgres
+    environment:
+      POSTGRES_USER: devops
+      POSTGRES_PASSWORD: devops_password
+      POSTGRES_DB: devops_db
+    ports:
+      # Expose to host so you can connect with a local DB client (TablePlus, psql)
+      - "5432:5432"
+    volumes:
+      # Named volume so data persists between container restarts
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - capstone-network
+    healthcheck:
+      # Only mark postgres as healthy when it accepts connections
+      # This is why app uses `depends_on: condition: service_healthy`
+      test: ["CMD-SHELL", "pg_isready -U devops -d devops_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  # Custom bridge network so containers can reach each other by service name
+  # Same mental model as K8s: pods communicate via ClusterIP Services by name
+  capstone-network:
+    driver: bridge
+
+volumes:
+  # Named volume — survives `docker-compose down`, deleted by `docker-compose down -v`
+  postgres_data:

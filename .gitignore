@@ -1,0 +1,43 @@
+# Node
+node_modules/
+npm-debug.log*
+dist/
+
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.*.local
+*.env
+
+# Terraform state — managed in S3 remote backend
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+.terraform/
+.terraform.lock.hcl
+
+# Terraform variable files with real values
+*.auto.tfvars
+terraform.tfvars
+
+# AWS credentials — NEVER here
+.aws/
+credentials
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Build artifacts
+dist/
+build/
