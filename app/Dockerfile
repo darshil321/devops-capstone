@@ -81,7 +81,7 @@ EXPOSE 3000
 # Health check so Docker itself knows if the container is healthy
 # (separate from K8s probes — Docker uses this for docker-compose health)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:3000/health/live || exit 1
+  CMD wget -qO- http://localhost:3000/api/health/live || exit 1
 
 # Start the compiled app (not ts-node — that's dev only)
 CMD ["node", "dist/main.js"]
