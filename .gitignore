@@ -13,8 +13,11 @@ dist/
 *.tfstate
 *.tfstate.backup
 *.tfstate.lock.info
+
+# Terraform provider binary cache — re-downloaded by terraform init
+# DO NOT ignore .terraform.lock.hcl — that file pins exact provider versions
+# and must be committed so CI and teammates use the same provider binary
 .terraform/
-.terraform.lock.hcl
 
 # Terraform variable files with real values
 *.auto.tfvars
