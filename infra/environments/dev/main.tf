@@ -21,11 +21,22 @@
 module "vpc" {
   source = "../../modules/vpc"
 
-  project_name      = var.project_name
-  environment       = var.environment
-  vpc_cidr          = "10.0.0.0/16"
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_cidr           = "10.0.0.0/16"
   availability_zones = ["us-east-1a", "us-east-1b"]
   enable_nat_gateway = true
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+module "iam" {
+  source = "../../modules/iam"
+
+  project_name = var.project_name
+  environment  = var.environment
 
   tags = {
     Environment = var.environment
