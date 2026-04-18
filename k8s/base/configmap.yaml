@@ -1,0 +1,24 @@
+# =============================================================================
+# CONFIGMAP
+# =============================================================================
+# Non-sensitive configuration for the NestJS app.
+# Mounted as environment variables in the pod.
+#
+# WHY ConfigMap and not hardcoded in Deployment?
+#   - Change config without rebuilding the image
+#   - Same image, different config per environment
+#   - Clearly separates code from configuration
+#
+# WHY not Secrets for these values?
+#   - PORT, NODE_ENV are not sensitive
+#   - Only database credentials, API keys go in Secrets
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devops-capstone-config
+  namespace: capstone
+data:
+  PORT: "3000"
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"

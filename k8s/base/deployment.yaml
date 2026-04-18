@@ -1,0 +1,139 @@
+# =============================================================================
+# DEPLOYMENT
+# =============================================================================
+# A Deployment manages a ReplicaSet, which manages Pods.
+# You declare desired state (2 replicas of this container), K8s makes it real.
+#
+# Backend SDE analogy:
+#   Deployment = process manager (like PM2)
+#   Pod        = running process instance
+#   ReplicaSet = "keep N processes alive at all times"
+#
+# Rolling update strategy (default):
+#   K8s spins up new pods BEFORE killing old ones.
+#   Zero downtime deploys. If new pods fail health checks, rollback is automatic.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-capstone
+  namespace: capstone
+  labels:
+    app: devops-capstone
+spec:
+  replicas: 2
+
+  # =============================================================================
+  # SELECTOR
+  # Tells the Deployment which pods it manages.
+  # Must match the labels in spec.template.metadata.labels.
+  # =============================================================================
+  selector:
+    matchLabels:
+      app: devops-capstone
+
+  # =============================================================================
+  # ROLLING UPDATE STRATEGY
+  # maxSurge: how many extra pods can exist during update (1 = 3 pods during deploy)
+  # maxUnavailable: how many pods can be down during update (0 = always 2 ready)
+  # =============================================================================
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: devops-capstone
+    spec:
+      # =============================================================================
+      # SECURITY CONTEXT (Pod level)
+      # runAsNonRoot: pod must not run as root user
+      # fsGroup: files created by containers belong to this group
+      # =============================================================================
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      containers:
+        - name: devops-capstone
+          # Replace with your ECR URL
+          image: 890742569958.dkr.ecr.us-east-1.amazonaws.com/devops-capstone-dev:v1
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+
+          # =============================================================================
+          # ENV FROM CONFIGMAP
+          # Injects all keys from ConfigMap as environment variables.
+          # =============================================================================
+          envFrom:
+            - configMapRef:
+                name: devops-capstone-config
+
+          # =============================================================================
+          # RESOURCE REQUESTS AND LIMITS
+          # requests: minimum guaranteed resources (used for scheduling)
+          # limits: hard cap (OOMKill if exceeded)
+          #
+          # WHY this matters:
+          #   Without requests, K8s can't schedule intelligently.
+          #   Without limits, one noisy pod starves other pods on the same node.
+          # =============================================================================
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"       # 100 millicores = 0.1 vCPU
+            limits:
+              memory: "256Mi"
+              cpu: "500m"       # 500 millicores = 0.5 vCPU
+
+          # =============================================================================
+          # LIVENESS PROBE
+          # If this fails: K8s restarts the container (kills and recreates)
+          # Use for: detecting deadlocks, hung processes
+          # Route: /api/health/live (checks memory heap only, no external deps)
+          # =============================================================================
+          livenessProbe:
+            httpGet:
+              path: /api/health/live
+              port: 3000
+            initialDelaySeconds: 30   # Wait for app to start before first check
+            periodSeconds: 30          # Check every 30 seconds
+            timeoutSeconds: 10         # Fail if no response in 10s
+            failureThreshold: 3        # Restart after 3 consecutive failures
+
+          # =============================================================================
+          # READINESS PROBE
+          # If this fails: K8s removes pod from Service endpoints (no traffic routed)
+          # Does NOT restart the pod — just stops sending traffic
+          # Use for: DB connections, cache warmup, circuit breakers
+          # Route: /api/health/ready (will check DB in Phase 3)
+          # =============================================================================
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: 3000
+            initialDelaySeconds: 15    # Shorter — ready probe can start sooner
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # =============================================================================
+          # STARTUP PROBE (Phase 5)
+          # For slow-starting apps. Disables liveness during startup.
+          # Not needed for NestJS (starts in ~100ms) but important for JVM apps.
+          # =============================================================================
+
+      # =============================================================================
+      # TERMINATION GRACE PERIOD
+      # K8s sends SIGTERM, waits this many seconds, then sends SIGKILL.
+      # NestJS handles SIGTERM — gives in-flight requests time to complete.
+      # =============================================================================
+      terminationGracePeriodSeconds: 30

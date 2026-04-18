@@ -1,0 +1,45 @@
+# =============================================================================
+# SERVICE
+# =============================================================================
+# A Service is a stable network endpoint for a set of pods.
+# Pods come and go (scaled up, crashed, rescheduled) — their IPs change.
+# A Service provides a single stable IP + DNS name that never changes.
+#
+# Backend SDE analogy:
+#   Service = load balancer in front of your API instances
+#   Pods    = the API instances (ephemeral IPs)
+#
+# Service types:
+#   ClusterIP    — only reachable within the cluster (default)
+#   NodePort     — reachable on a port on each node's external IP
+#   LoadBalancer — provisions an AWS ELB/NLB automatically
+#
+# We use ClusterIP here — the Ingress controller (ALB) routes external
+# traffic to the Service. The Service then load-balances to pods.
+#
+# DNS name inside cluster: devops-capstone.capstone.svc.cluster.local
+# Short form (within same namespace): devops-capstone
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-capstone
+  namespace: capstone
+  labels:
+    app: devops-capstone
+spec:
+  type: ClusterIP
+
+  # =============================================================================
+  # SELECTOR
+  # Finds pods with this label and routes traffic to them.
+  # Must match the labels in the Deployment's pod template.
+  # =============================================================================
+  selector:
+    app: devops-capstone
+
+  ports:
+    - name: http
+      port: 80          # Port the Service listens on (inside cluster)
+      targetPort: 3000  # Port the container listens on
+      protocol: TCP
