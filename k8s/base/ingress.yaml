@@ -1,0 +1,58 @@
+# =============================================================================
+# INGRESS
+# =============================================================================
+# Routes external internet traffic into the cluster.
+#
+# Flow:
+#   Internet → AWS ALB → Ingress Controller → Service (ClusterIP:80) → Pods(:3000)
+#
+# The "kubernetes.io/ingress.class: alb" annotation tells the AWS Load
+# Balancer Controller to handle this Ingress object and create an ALB.
+#
+# Backend SDE analogy:
+#   Ingress         = nginx.conf routing rules
+#   Ingress class   = tells K8s which controller handles this Ingress
+#   ALB             = the actual load balancer in your VPC
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devops-capstone
+  namespace: capstone
+  annotations:
+
+    # Create an internet-facing ALB (vs internal-only)
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # Use IP mode: route directly to pod IPs (faster, fewer hops vs instance mode)
+    # instance mode: ALB → NodePort → pod
+    # ip mode:       ALB → pod IP directly (requires VPC CNI)
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # Listen on port 80 (HTTP)
+    # In Phase 5 we'll add port 443 with ACM certificate for HTTPS
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+
+    # Explicit public subnet IDs — bypasses auto-discovery which needs ec2:DescribeRouteTables.
+    # Long-term fix: add kubernetes.io/role/elb: "1" tag to public subnets in the VPC module.
+    alb.ingress.kubernetes.io/subnets: subnet-0963d507e76a9fdc0,subnet-099589098eafe907b
+
+    # Health check the same endpoint our readiness probe uses
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health/ready
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devops-capstone
+                port:
+                  number: 80

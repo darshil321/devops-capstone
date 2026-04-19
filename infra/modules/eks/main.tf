@@ -174,6 +174,7 @@ resource "aws_eks_node_group" "main" {
   }
 
   instance_types = [var.node_instance_type]
+  ami_type       = "AL2_x86_64"
 
   # Enable bootstrapping (join to cluster automatically)
   # The node bootstrap process will:
