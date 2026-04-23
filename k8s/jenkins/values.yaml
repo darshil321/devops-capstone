@@ -70,21 +70,25 @@ controller:
   fsGroup: 1000
 
   # -------------------------------------------------------------------------
-  # Agent configuration (Kubernetes plugin)
-  # Defines the default pod template for build agents
+  # JCasC: Jenkins Configuration as Code
+  # Configures the Kubernetes cloud so Jenkins knows where to spin up agent pods.
+  # Since Jenkins runs inside EKS, we leave the URL blank = uses in-cluster config.
   # -------------------------------------------------------------------------
-  podTemplates:
-    devops-agent:
-      label: devops-agent
-      containers:
-        - name: docker
-          image: docker:28-dind
-          ttyEnabled: true
-          privileged: true
-          envVars:
-            - envVar:
-                key: DOCKER_TLS_CERTDIR
-                value: ""
+  JCasC:
+    configScripts:
+      kubernetes-cloud: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: ""
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+                connectTimeout: 5
+                readTimeout: 15
+                containerCapStr: "10"
+                podRetention: "never"
 
 # =============================================================================
 # PERSISTENCE

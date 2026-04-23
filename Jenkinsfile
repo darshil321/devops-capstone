@@ -153,21 +153,30 @@ spec:
 
         // =====================================================================
         // STAGE 3: PUSH TO ECR
-        // Authenticates to ECR using IRSA credentials (no static keys needed).
-        // The Jenkins ServiceAccount has JenkinsCIPolicy attached via IRSA,
-        // so `aws ecr get-login-password` returns a valid token automatically.
+        // The docker container has Docker but not AWS CLI.
+        // The aws-kubectl container has AWS CLI but not Docker.
+        // Solution: get the ECR token in aws-kubectl, write it to the shared
+        // workspace (/home/jenkins/agent), then use it in the docker container.
+        // All containers in a pod share the same workspace volume.
         // =====================================================================
         stage('Push to ECR') {
             steps {
+                // Step 1: get ECR token using IRSA (in aws-kubectl container)
+                container('aws-kubectl') {
+                    sh """
+                        mkdir -p /home/jenkins/agent/.docker
+                        ECR_TOKEN=\$(aws ecr get-login-password --region ${AWS_REGION})
+                        AUTH=\$(echo -n "AWS:\$ECR_TOKEN" | base64 | tr -d '\\n')
+                        echo '{\"auths\":{\"${ECR_REGISTRY}\":{\"auth\":\"'\$AUTH'\"}}}' \\
+                            > /home/jenkins/agent/.docker/config.json
+                        echo "ECR credentials written to shared workspace"
+                    """
+                }
+                // Step 2: push using docker, pointing at the shared credentials
                 container('docker') {
                     sh """
-                        # Get ECR auth token using IRSA credentials
-                        aws ecr get-login-password --region ${AWS_REGION} \\
-                            | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-                        # Push the image
+                        export DOCKER_CONFIG=/home/jenkins/agent/.docker
                         docker push ${IMAGE_FULL}
-
                         echo "Pushed: ${IMAGE_FULL}"
                     """
                 }
