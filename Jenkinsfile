@@ -190,21 +190,29 @@ spec:
 
         // =====================================================================
         // STAGE 4: DEPLOY TO EKS
-        // Updates the Deployment image tag and triggers a rolling update.
+        // Jenkins runs INSIDE the cluster → use in-cluster config directly.
+        // The pod's ServiceAccount token is auto-mounted and our RBAC Role
+        // grants it patch/update on Deployments in the capstone namespace.
         //
-        // WHY kubectl set image (not rollout restart):
-        //   rollout restart → always pulls same tag (idempotent but wasteful)
-        //   set image       → changes the tag → K8s detects actual change →
-        //                     only rolls when image actually changed
+        // WHY in-cluster vs aws eks update-kubeconfig:
+        //   update-kubeconfig uses an exec auth plugin (aws eks get-token) which
+        //   requires the aws CLI and IRSA env vars to be available at auth time.
+        //   In-cluster config uses the pod's mounted ServiceAccount token directly
+        //   — simpler, always available, no external dependency.
         // =====================================================================
         stage('Deploy to EKS') {
             steps {
                 container('aws-kubectl') {
                     sh """
-                        # Update kubeconfig using IRSA credentials
-                        aws eks update-kubeconfig \\
-                            --region ${AWS_REGION} \\
-                            --name ${EKS_CLUSTER}
+                        # Use in-cluster config (pod ServiceAccount token, already has RBAC perms)
+                        kubectl config set-cluster in-cluster \\
+                            --server=https://kubernetes.default.svc \\
+                            --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                        kubectl config set-credentials jenkins-sa \\
+                            --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                        kubectl config set-context in-cluster \\
+                            --cluster=in-cluster --user=jenkins-sa
+                        kubectl config use-context in-cluster
 
                         # Update the deployment's image to the new SHA-tagged image
                         kubectl set image deployment/${K8S_DEPLOYMENT} \\
@@ -252,8 +260,11 @@ spec:
             echo "Pipeline FAILED — check logs above. Rolling back if needed:"
             container('aws-kubectl') {
                 sh """
-                    kubectl rollout undo deployment/${K8S_DEPLOYMENT} \\
-                        -n ${K8S_NAMESPACE} || true
+                    kubectl config set-cluster in-cluster --server=https://kubernetes.default.svc --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt || true
+                    kubectl config set-credentials jenkins-sa --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) || true
+                    kubectl config set-context in-cluster --cluster=in-cluster --user=jenkins-sa || true
+                    kubectl config use-context in-cluster || true
+                    kubectl rollout undo deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} || true
                 """
             }
         }
