@@ -1,0 +1,24 @@
+# =============================================================================
+# GP2-CSI STORAGECLASS
+# =============================================================================
+# K8s 1.23+ removed the in-tree EBS provisioner (kubernetes.io/aws-ebs).
+# This StorageClass uses the EBS CSI driver (ebs.csi.aws.com) instead.
+#
+# WHY a new class instead of patching the default gp2?
+#   The default gp2 uses the old in-tree provisioner and cannot be changed
+#   in-place without disrupting existing PVCs. Creating a parallel class is safer.
+#
+# WaitForFirstConsumer: provision the EBS volume in the same AZ as the pod.
+#   Without this, you might get an EBS volume in us-east-1a but the pod
+#   scheduled on a node in us-east-1b → volume can't attach (EBS is AZ-scoped).
+# =============================================================================
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp2-csi
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+parameters:
+  type: gp2
+  encrypted: "true"

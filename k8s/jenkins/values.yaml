@@ -1,0 +1,119 @@
+# =============================================================================
+# JENKINS HELM VALUES
+# =============================================================================
+# Customizes the official Jenkins Helm chart for our EKS cluster.
+#
+# Chart: jenkins/jenkins
+# Docs: https://github.com/jenkinsci/helm-charts
+#
+# Key decisions:
+#   - ClusterIP service (exposed via ALB Ingress, not NodePort)
+#   - 8Gi EBS volume for persistent config
+#   - Kubernetes plugin: agent pods spin up per build, die after
+#   - IRSA: Jenkins ServiceAccount gets ECR push + EKS deploy permissions
+# =============================================================================
+
+controller:
+  # -------------------------------------------------------------------------
+  # Admin credentials
+  # In production these would come from a K8s Secret, not hardcoded here.
+  # For Phase 4 dev setup, this is acceptable.
+  # -------------------------------------------------------------------------
+  admin:
+    username: "admin"
+    password: "DevOps2024!"
+
+  # -------------------------------------------------------------------------
+  # Resource limits
+  # Jenkins controller is memory-hungry (JVM). 512Mi min, 1Gi max.
+  # -------------------------------------------------------------------------
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+  # -------------------------------------------------------------------------
+  # JVM tuning: set heap explicitly so JVM doesn't try to grab all node memory
+  # -------------------------------------------------------------------------
+  javaOpts: "-Xms256m -Xmx512m -XX:+UseG1GC"
+
+  # -------------------------------------------------------------------------
+  # Service: ClusterIP (we expose via ALB Ingress)
+  # -------------------------------------------------------------------------
+  serviceType: ClusterIP
+  servicePort: 8080
+
+  # -------------------------------------------------------------------------
+  # Plugins to install on first boot
+  # These are the minimum set for our GitHub → ECR → EKS pipeline
+  # -------------------------------------------------------------------------
+  installPlugins:
+    - kubernetes:latest          # agent pods in K8s
+    - workflow-aggregator:latest # Pipeline DSL (includes all pipeline plugins)
+    - git:latest                 # Git SCM
+    - github:latest              # GitHub webhooks
+    - docker-workflow:latest     # Docker.build/push steps
+    - pipeline-aws:latest        # withAWS, ECR login steps
+    - credentials-binding:latest # credentials in pipelines
+    - aws-credentials:latest     # AWS credential type
+    - pipeline-stage-view:latest # Stage view in classic UI
+
+  # Ingress managed separately in k8s/jenkins/ingress.yaml for full control
+
+  # -------------------------------------------------------------------------
+  # Security: run as non-root
+  # -------------------------------------------------------------------------
+  runAsUser: 1000
+  fsGroup: 1000
+
+  # -------------------------------------------------------------------------
+  # Agent configuration (Kubernetes plugin)
+  # Defines the default pod template for build agents
+  # -------------------------------------------------------------------------
+  podTemplates:
+    devops-agent:
+      label: devops-agent
+      containers:
+        - name: docker
+          image: docker:28-dind
+          ttyEnabled: true
+          privileged: true
+          envVars:
+            - envVar:
+                key: DOCKER_TLS_CERTDIR
+                value: ""
+
+# =============================================================================
+# PERSISTENCE
+# =============================================================================
+# EBS volume for Jenkins home directory (/var/jenkins_home)
+# Survives pod restarts — preserves jobs, plugins, credentials
+# =============================================================================
+persistence:
+  enabled: true
+  storageClass: gp2-csi
+  size: 8Gi
+  accessMode: ReadWriteOnce
+
+# =============================================================================
+# SERVICE ACCOUNT
+# =============================================================================
+# Jenkins needs to create agent pods → needs K8s RBAC permissions
+# IRSA annotation added separately (needs cluster OIDC URL, done via Terraform)
+# =============================================================================
+serviceAccount:
+  create: true
+  name: jenkins
+
+agent:
+  # Resources for build agent pods (spun up per build, killed after)
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
