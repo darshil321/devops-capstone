@@ -133,6 +133,11 @@ spec:
                 container('docker') {
                     dir('app') {
                         sh """
+                            # Wait for Docker daemon to be ready (DinD takes ~5s to start)
+                            echo "Waiting for Docker daemon..."
+                            until docker info > /dev/null 2>&1; do sleep 2; done
+                            echo "Docker daemon ready"
+
                             # Install buildx plugin for cross-platform builds
                             docker buildx create --use --name multiarch 2>/dev/null || true
 
